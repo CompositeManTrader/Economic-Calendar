@@ -1,8 +1,8 @@
 """
-🏛️ US Economic Calendar — Macro Research Dashboard
-====================================================
-v2.0 — Native Streamlit components (no raw HTML issues)
-Inspired by Trading Economics visual style
+🏛️ US ECONOMIC CALENDAR — v3 FINAL
+=====================================
+Premium macro research dashboard.
+FRED API key integrated. Production-ready.
 """
 
 import streamlit as st
@@ -11,435 +11,673 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
-import calendar as cal_module
-import requests
-import io
+import calendar as cal_mod
+from fredapi import Fred
+import time
 
 # ============================================================
-# PAGE CONFIG
+# CONFIG
 # ============================================================
 st.set_page_config(
-    page_title="US Economic Calendar",
-    page_icon="🏛️",
+    page_title="US Macro Dashboard",
+    page_icon="📊",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
+FRED_KEY = "a9912f412f890fe14bbaf73000c76838"
+
+
 # ============================================================
-# MINIMAL SAFE CSS (only styling, no structural HTML)
+# PREMIUM CSS — Bloomberg meets Figma
 # ============================================================
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
-    
-    /* Global font */
-    html, body, [class*="css"] {
-        font-family: 'DM Sans', sans-serif;
-    }
-    
-    /* Remove default padding */
-    .block-container { padding-top: 1rem; }
-    
-    /* Metric cards styling */
-    [data-testid="stMetric"] {
-        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-        border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 16px 20px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-    }
-    [data-testid="stMetricValue"] {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 1.6rem !important;
-        font-weight: 700 !important;
-    }
-    [data-testid="stMetricLabel"] {
-        font-size: 0.78rem !important;
-        text-transform: uppercase;
-        letter-spacing: 0.6px;
-        font-weight: 600 !important;
-        color: #64748b !important;
-    }
-    [data-testid="stMetricDelta"] {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.8rem !important;
-    }
-    
-    /* Tabs styling */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 0px;
-        background: #f1f5f9;
-        border-radius: 10px;
-        padding: 4px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        border-radius: 8px;
-        padding: 8px 20px;
-        font-weight: 600;
-        font-size: 0.85rem;
-    }
-    .stTabs [aria-selected="true"] {
-        background: white;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }
-    
-    /* Dataframe styling */
-    [data-testid="stDataFrame"] {
-        border-radius: 10px;
-        overflow: hidden;
-    }
-    
-    /* Sidebar */
-    section[data-testid="stSidebar"] {
-        background: #f8fafc;
-    }
-    section[data-testid="stSidebar"] [data-testid="stMarkdown"] p {
-        font-size: 0.85rem;
-    }
-    
-    /* Expander styling */
-    .streamlit-expanderHeader {
-        font-weight: 600 !important;
-        font-size: 0.95rem !important;
-    }
-    
-    /* Divider */
-    hr {
-        border-color: #e2e8f0 !important;
-    }
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+/* ─── GLOBAL ────────────────────────────── */
+html, body, [class*="css"] {
+    font-family: 'Outfit', sans-serif !important;
+}
+.block-container {
+    padding: 1.5rem 2rem 2rem 2rem !important;
+    max-width: 1400px;
+}
+h1, h2, h3, h4 { font-family: 'Outfit', sans-serif !important; }
+
+/* ─── HERO BANNER ───────────────────────── */
+.hero {
+    background: linear-gradient(140deg, #020617 0%, #0f172a 40%, #1e293b 100%);
+    border-radius: 16px;
+    padding: 2.2rem 2.8rem;
+    margin-bottom: 1.8rem;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.06);
+}
+.hero::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -20%;
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, rgba(59,130,246,0.12) 0%, transparent 70%);
+    pointer-events: none;
+}
+.hero::after {
+    content: '';
+    position: absolute;
+    bottom: -30%;
+    left: 10%;
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(16,185,129,0.08) 0%, transparent 70%);
+    pointer-events: none;
+}
+.hero h1 {
+    color: #f1f5f9;
+    font-weight: 800;
+    font-size: 2rem;
+    margin: 0 0 4px 0;
+    letter-spacing: -0.8px;
+    position: relative;
+}
+.hero .sub {
+    color: #64748b;
+    font-size: 0.88rem;
+    font-weight: 400;
+    position: relative;
+}
+.hero .live {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(16,185,129,0.15);
+    color: #34d399;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 100px;
+    margin-left: 14px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    position: relative;
+}
+.hero .live::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    background: #34d399;
+    border-radius: 50%;
+    animation: blink 1.5s infinite;
+}
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+/* ─── KPI STRIP ─────────────────────────── */
+.kpi-strip {
+    display: flex;
+    gap: 14px;
+    margin-bottom: 1.6rem;
+    flex-wrap: wrap;
+}
+.kpi {
+    flex: 1;
+    min-width: 200px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 18px 22px;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.2s ease;
+}
+.kpi:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.04);
+    transform: translateY(-1px);
+}
+.kpi .tag {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #94a3b8;
+    margin-bottom: 6px;
+}
+.kpi .val {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 1.9rem;
+    font-weight: 600;
+    color: #0f172a;
+    line-height: 1;
+}
+.kpi .unit {
+    font-size: 0.85rem;
+    color: #94a3b8;
+    font-weight: 400;
+}
+.kpi .delta {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.78rem;
+    font-weight: 500;
+    margin-top: 6px;
+}
+.kpi .delta.up { color: #10b981; }
+.kpi .delta.dn { color: #ef4444; }
+.kpi .delta.flat { color: #94a3b8; }
+.kpi .spark {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 100px;
+    height: 45px;
+    opacity: 0.12;
+}
+
+/* ─── SECTION LABEL ─────────────────────── */
+.sec {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 2.2rem 0 1rem 0;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #0f172a;
+}
+.sec h2 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0;
+    letter-spacing: -0.3px;
+}
+.sec .cnt {
+    background: #0f172a;
+    color: white;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 2px 10px;
+    border-radius: 100px;
+    font-family: 'IBM Plex Mono', monospace;
+}
+
+/* ─── CALENDAR TABLE ────────────────────── */
+.ctbl {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+    font-size: 0.84rem;
+}
+.ctbl thead {
+    background: linear-gradient(135deg, #020617, #0f172a);
+}
+.ctbl th {
+    color: #94a3b8;
+    padding: 13px 18px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+}
+.ctbl td {
+    padding: 12px 18px;
+    border-bottom: 1px solid #f1f5f9;
+    color: #1e293b;
+    vertical-align: middle;
+}
+.ctbl tbody tr {
+    transition: background 0.15s;
+}
+.ctbl tbody tr:hover {
+    background: #f8fafc;
+}
+.ctbl tbody tr:last-child td {
+    border-bottom: none;
+}
+.ctbl .ev {
+    font-weight: 600;
+    color: #0f172a;
+}
+.ctbl .mono {
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 500;
+}
+
+/* ─── BADGES ────────────────────────────── */
+.b-high {
+    display: inline-block;
+    background: linear-gradient(135deg, #fef2f2, #fee2e2);
+    color: #dc2626;
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 3px 12px;
+    border-radius: 100px;
+    letter-spacing: 0.3px;
+    border: 1px solid #fecaca;
+}
+.b-med {
+    display: inline-block;
+    background: linear-gradient(135deg, #fffbeb, #fef3c7);
+    color: #d97706;
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 3px 12px;
+    border-radius: 100px;
+    letter-spacing: 0.3px;
+    border: 1px solid #fde68a;
+}
+
+/* ─── COUNTDOWN CHIPS ───────────────────── */
+.cd {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 3px 11px;
+    border-radius: 100px;
+    display: inline-block;
+}
+.cd-now {
+    background: #dc2626;
+    color: white;
+    animation: blink 1s infinite;
+}
+.cd-soon {
+    background: #fff7ed;
+    color: #ea580c;
+    border: 1px solid #fed7aa;
+}
+.cd-week {
+    background: #eff6ff;
+    color: #2563eb;
+    border: 1px solid #bfdbfe;
+}
+.cd-later {
+    background: #f8fafc;
+    color: #94a3b8;
+    border: 1px solid #e2e8f0;
+}
+
+/* ─── FOMC TABLE ────────────────────────── */
+.ftbl {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+    font-size: 0.82rem;
+}
+.ftbl thead { background: #0f172a; }
+.ftbl th {
+    color: #94a3b8;
+    padding: 11px 16px;
+    font-weight: 600;
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    text-align: left;
+}
+.ftbl td {
+    padding: 10px 16px;
+    border-bottom: 1px solid #f1f5f9;
+    color: #334155;
+}
+.ftbl tbody tr:last-child td { border-bottom: none; }
+.ftbl .soon-row { background: #fffbeb !important; }
+
+/* ─── TABS ──────────────────────────────── */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 2px;
+    background: #f1f5f9;
+    border-radius: 12px;
+    padding: 4px;
+}
+.stTabs [data-baseweb="tab"] {
+    border-radius: 10px;
+    padding: 10px 24px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    font-family: 'Outfit', sans-serif;
+}
+.stTabs [aria-selected="true"] {
+    background: white !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    color: #0f172a !important;
+}
+
+/* ─── METRICS ───────────────────────────── */
+[data-testid="stMetric"] {
+    background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 18px 22px !important;
+}
+[data-testid="stMetricValue"] {
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-size: 1.5rem !important;
+    font-weight: 600 !important;
+    color: #0f172a !important;
+}
+[data-testid="stMetricLabel"] {
+    font-family: 'Outfit', sans-serif !important;
+    font-size: 0.72rem !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.7px !important;
+    font-weight: 600 !important;
+    color: #94a3b8 !important;
+}
+[data-testid="stMetricDelta"] {
+    font-family: 'IBM Plex Mono', monospace !important;
+}
+
+/* ─── SIDEBAR ───────────────────────────── */
+section[data-testid="stSidebar"] {
+    background: #f8fafc;
+    border-right: 1px solid #e2e8f0;
+}
+section[data-testid="stSidebar"] .stMarkdown h2 {
+    font-size: 1rem;
+    letter-spacing: -0.2px;
+}
+
+/* ─── INFO CARD ─────────────────────────── */
+.info-card {
+    background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+    border: 1px solid #bae6fd;
+    border-radius: 14px;
+    padding: 20px 24px;
+    margin: 12px 0;
+}
+.info-card h4 {
+    color: #0c4a6e;
+    margin: 0 0 4px 0;
+    font-weight: 700;
+}
+.info-card p {
+    color: #0369a1;
+    font-size: 0.85rem;
+    margin: 0;
+}
+.info-card code {
+    background: rgba(3,105,161,0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.78rem;
+}
+
+/* ─── FOOTER ────────────────────────────── */
+.foot {
+    text-align: center;
+    padding: 1.5rem;
+    color: #94a3b8;
+    font-size: 0.75rem;
+    border-top: 1px solid #e2e8f0;
+    margin-top: 2rem;
+}
 </style>
 """, unsafe_allow_html=True)
 
 
 # ============================================================
-# COLOR PALETTE
+# FRED CONNECTION
 # ============================================================
-COLORS = {
-    'primary': '#0f172a',
-    'accent': '#2563eb',
-    'green': '#16a34a',
-    'red': '#dc2626',
-    'orange': '#ea580c',
-    'gold': '#d97706',
-    'gray': '#64748b',
-    'light': '#f1f5f9',
-    'grid': '#f1f5f9',
-    'bg': '#ffffff',
-    # Chart lines
-    'c1': '#0f172a',
-    'c2': '#2563eb',
-    'c3': '#dc2626',
-    'c4': '#16a34a',
-    'c5': '#d97706',
-}
+@st.cache_resource
+def get_fred():
+    return Fred(api_key=FRED_KEY)
+
+fred = get_fred()
 
 
 # ============================================================
-# INDICADORES CATALOG
+# INDICATOR CATALOG
 # ============================================================
-INDICADORES = [
+IND = [
     # INFLACIÓN
-    {'fred_id': 'CPIAUCSL', 'nombre': 'CPI — Consumer Price Index', 'short': 'CPI',
-     'cat': 'Inflación', 'icon': '🔥', 'freq': 'Mensual', 'impact': 'ALTO',
-     'source': 'BLS', 'desc': 'Variación de precios al consumidor. El indicador de inflación más seguido.', 'tf': 'pct12'},
-    {'fred_id': 'CPILFESL', 'nombre': 'Core CPI (Ex-Food & Energy)', 'short': 'Core CPI',
-     'cat': 'Inflación', 'icon': '🔥', 'freq': 'Mensual', 'impact': 'ALTO',
-     'source': 'BLS', 'desc': 'CPI excluyendo alimentos y energía — inflación subyacente.', 'tf': 'pct12'},
-    {'fred_id': 'PCEPI', 'nombre': 'PCE Price Index', 'short': 'PCE',
-     'cat': 'Inflación', 'icon': '🔥', 'freq': 'Mensual', 'impact': 'ALTO',
-     'source': 'BEA', 'desc': 'Indicador de inflación PREFERIDO de la Fed. Meta: 2%.', 'tf': 'pct12'},
-    {'fred_id': 'PCEPILFE', 'nombre': 'Core PCE (Ex-Food & Energy)', 'short': 'Core PCE',
-     'cat': 'Inflación', 'icon': '🔥', 'freq': 'Mensual', 'impact': 'ALTO',
-     'source': 'BEA', 'desc': 'La métrica que la Fed usa para su objetivo de inflación del 2%.', 'tf': 'pct12'},
-    {'fred_id': 'PPIFIS', 'nombre': 'PPI — Producer Price Index', 'short': 'PPI',
-     'cat': 'Inflación', 'icon': '🔥', 'freq': 'Mensual', 'impact': 'MEDIO',
-     'source': 'BLS', 'desc': 'Precios a nivel productor. Indicador adelantado de inflación.', 'tf': 'pct12'},
-
+    dict(id='CPIAUCSL', name='CPI — Consumer Price Index', s='CPI', cat='Inflación', ic='🔥',
+         fr='Mensual', imp='ALTO', src='BLS', d='Variación de precios al consumidor. El más seguido.', tf='y'),
+    dict(id='CPILFESL', name='Core CPI (Ex-Food & Energy)', s='Core CPI', cat='Inflación', ic='🔥',
+         fr='Mensual', imp='ALTO', src='BLS', d='CPI subyacente sin alimentos ni energía.', tf='y'),
+    dict(id='PCEPI', name='PCE Price Index', s='PCE', cat='Inflación', ic='🔥',
+         fr='Mensual', imp='ALTO', src='BEA', d='Indicador de inflación PREFERIDO de la Fed. Meta 2%.', tf='y'),
+    dict(id='PCEPILFE', name='Core PCE (Ex-Food & Energy)', s='Core PCE', cat='Inflación', ic='🔥',
+         fr='Mensual', imp='ALTO', src='BEA', d='La métrica exacta del objetivo de inflación del 2% de la Fed.', tf='y'),
+    dict(id='PPIFIS', name='PPI — Producer Price Index', s='PPI', cat='Inflación', ic='🔥',
+         fr='Mensual', imp='MEDIO', src='BLS', d='Precios al productor. Indicador adelantado de inflación.', tf='y'),
     # EMPLEO
-    {'fred_id': 'PAYEMS', 'nombre': 'Nonfarm Payrolls (NFP)', 'short': 'NFP',
-     'cat': 'Empleo', 'icon': '👷', 'freq': 'Mensual', 'impact': 'ALTO',
-     'source': 'BLS', 'desc': 'Cambio mensual en empleo no agrícola. El dato que más mueve mercados.', 'tf': 'diff'},
-    {'fred_id': 'UNRATE', 'nombre': 'Unemployment Rate', 'short': 'Desempleo',
-     'cat': 'Empleo', 'icon': '👷', 'freq': 'Mensual', 'impact': 'ALTO',
-     'source': 'BLS', 'desc': 'Tasa de desempleo. Parte del mandato dual de la Fed.', 'tf': 'level'},
-    {'fred_id': 'CES0500000003', 'nombre': 'Average Hourly Earnings', 'short': 'Salarios/Hora',
-     'cat': 'Empleo', 'icon': '👷', 'freq': 'Mensual', 'impact': 'ALTO',
-     'source': 'BLS', 'desc': 'Salario promedio por hora. Presiones inflacionarias laborales.', 'tf': 'pct12'},
-    {'fred_id': 'ICSA', 'nombre': 'Initial Jobless Claims', 'short': 'Jobless Claims',
-     'cat': 'Empleo', 'icon': '👷', 'freq': 'Semanal', 'impact': 'MEDIO',
-     'source': 'DOL', 'desc': 'Solicitudes semanales de seguro de desempleo.', 'tf': 'level'},
-    {'fred_id': 'JTSJOL', 'nombre': 'JOLTS — Job Openings', 'short': 'JOLTS',
-     'cat': 'Empleo', 'icon': '👷', 'freq': 'Mensual', 'impact': 'MEDIO',
-     'source': 'BLS', 'desc': 'Vacantes laborales. La Fed lo monitorea de cerca.', 'tf': 'level'},
-
-    # ACTIVIDAD / PIB
-    {'fred_id': 'GDP', 'nombre': 'GDP — Gross Domestic Product', 'short': 'PIB',
-     'cat': 'Actividad', 'icon': '📈', 'freq': 'Trimestral', 'impact': 'ALTO',
-     'source': 'BEA', 'desc': 'Producto Interno Bruto.', 'tf': 'pct_ann'},
-    {'fred_id': 'RSAFS', 'nombre': 'Retail Sales (Advance)', 'short': 'Retail Sales',
-     'cat': 'Actividad', 'icon': '📈', 'freq': 'Mensual', 'impact': 'ALTO',
-     'source': 'Census', 'desc': 'Ventas al por menor. Consumo = ~70% del PIB.', 'tf': 'pct'},
-    {'fred_id': 'INDPRO', 'nombre': 'Industrial Production', 'short': 'Prod. Industrial',
-     'cat': 'Actividad', 'icon': '📈', 'freq': 'Mensual', 'impact': 'MEDIO',
-     'source': 'Fed Board', 'desc': 'Producción industrial de fábricas, minas y utilidades.', 'tf': 'pct'},
-
+    dict(id='PAYEMS', name='Nonfarm Payrolls (NFP)', s='NFP', cat='Empleo', ic='👷',
+         fr='Mensual', imp='ALTO', src='BLS', d='Cambio mensual en empleo no agrícola. Mueve mercados.', tf='d'),
+    dict(id='UNRATE', name='Unemployment Rate', s='Desempleo', cat='Empleo', ic='👷',
+         fr='Mensual', imp='ALTO', src='BLS', d='Tasa de desempleo. Mandato dual de la Fed.', tf='l'),
+    dict(id='CES0500000003', name='Average Hourly Earnings', s='Salarios/Hora', cat='Empleo', ic='👷',
+         fr='Mensual', imp='ALTO', src='BLS', d='Salario promedio por hora. Presiones inflacionarias laborales.', tf='y'),
+    dict(id='ICSA', name='Initial Jobless Claims', s='Jobless Claims', cat='Empleo', ic='👷',
+         fr='Semanal', imp='MEDIO', src='DOL', d='Solicitudes semanales de desempleo. Alta frecuencia.', tf='l'),
+    dict(id='JTSJOL', name='JOLTS — Job Openings', s='JOLTS', cat='Empleo', ic='👷',
+         fr='Mensual', imp='MEDIO', src='BLS', d='Vacantes laborales. Indicador de demanda de trabajo.', tf='l'),
+    # ACTIVIDAD
+    dict(id='GDP', name='GDP (Gross Domestic Product)', s='PIB', cat='Actividad', ic='📈',
+         fr='Trimestral', imp='ALTO', src='BEA', d='Producto Interno Bruto. La medida más amplia de actividad.', tf='a'),
+    dict(id='RSAFS', name='Retail Sales (Advance)', s='Retail Sales', cat='Actividad', ic='📈',
+         fr='Mensual', imp='ALTO', src='Census', d='Ventas minoristas. Consumo = ~70% del PIB.', tf='m'),
+    dict(id='INDPRO', name='Industrial Production', s='Prod. Industrial', cat='Actividad', ic='📈',
+         fr='Mensual', imp='MEDIO', src='Fed Board', d='Producción de fábricas, minas y utilidades.', tf='m'),
     # CONFIANZA
-    {'fred_id': 'UMCSENT', 'nombre': 'U. Michigan Consumer Sentiment', 'short': 'UMich Sentiment',
-     'cat': 'Confianza', 'icon': '🧠', 'freq': 'Mensual', 'impact': 'MEDIO',
-     'source': 'U. Michigan', 'desc': 'Confianza del consumidor + expectativas de inflación.', 'tf': 'level'},
-
+    dict(id='UMCSENT', name='U. Michigan Consumer Sentiment', s='UMich', cat='Confianza', ic='🧠',
+         fr='Mensual', imp='MEDIO', src='U. Michigan', d='Confianza del consumidor + expectativas de inflación.', tf='l'),
     # MANUFACTURA
-    {'fred_id': 'DGORDER', 'nombre': 'Durable Goods Orders', 'short': 'Durable Goods',
-     'cat': 'Manufactura', 'icon': '🏭', 'freq': 'Mensual', 'impact': 'MEDIO',
-     'source': 'Census', 'desc': 'Pedidos de bienes duraderos. Proxy de inversión empresarial.', 'tf': 'pct'},
-
+    dict(id='DGORDER', name='Durable Goods Orders', s='Durable Goods', cat='Manufactura', ic='🏭',
+         fr='Mensual', imp='MEDIO', src='Census', d='Pedidos de bienes duraderos. Proxy de inversión.', tf='m'),
     # VIVIENDA
-    {'fred_id': 'HOUST', 'nombre': 'Housing Starts', 'short': 'Housing Starts',
-     'cat': 'Vivienda', 'icon': '🏠', 'freq': 'Mensual', 'impact': 'MEDIO',
-     'source': 'Census', 'desc': 'Inicio de construcción de viviendas.', 'tf': 'level'},
-    {'fred_id': 'EXHOSLUSM495S', 'nombre': 'Existing Home Sales', 'short': 'Existing Homes',
-     'cat': 'Vivienda', 'icon': '🏠', 'freq': 'Mensual', 'impact': 'MEDIO',
-     'source': 'NAR', 'desc': 'Ventas de casas existentes.', 'tf': 'level'},
-
+    dict(id='HOUST', name='Housing Starts', s='Housing Starts', cat='Vivienda', ic='🏠',
+         fr='Mensual', imp='MEDIO', src='Census', d='Inicio de construcción de viviendas.', tf='l'),
+    dict(id='EXHOSLUSM495S', name='Existing Home Sales', s='Existing Homes', cat='Vivienda', ic='🏠',
+         fr='Mensual', imp='MEDIO', src='NAR', d='Ventas de casas existentes.', tf='l'),
     # COMERCIO
-    {'fred_id': 'BOPGSTB', 'nombre': 'Trade Balance', 'short': 'Trade Balance',
-     'cat': 'Comercio', 'icon': '🌍', 'freq': 'Mensual', 'impact': 'MEDIO',
-     'source': 'Census/BEA', 'desc': 'Exportaciones menos importaciones.', 'tf': 'level'},
-
-    # POLÍTICA MONETARIA
-    {'fred_id': 'FEDFUNDS', 'nombre': 'Federal Funds Rate', 'short': 'Fed Funds',
-     'cat': 'Pol. Monetaria', 'icon': '🏦', 'freq': 'Diario', 'impact': 'ALTO',
-     'source': 'Federal Reserve', 'desc': 'Tasa de referencia de la Fed.', 'tf': 'level'},
-    {'fred_id': 'T10Y2Y', 'nombre': 'Yield Spread 10Y-2Y', 'short': 'Curva 10Y-2Y',
-     'cat': 'Pol. Monetaria', 'icon': '🏦', 'freq': 'Diario', 'impact': 'ALTO',
-     'source': 'Treasury/Fed', 'desc': 'Spread 10Y-2Y. Inversión = señal de recesión.', 'tf': 'level'},
+    dict(id='BOPGSTB', name='Trade Balance', s='Trade Balance', cat='Comercio', ic='🌍',
+         fr='Mensual', imp='MEDIO', src='Census/BEA', d='Exportaciones menos importaciones.', tf='l'),
+    # POL. MONETARIA
+    dict(id='FEDFUNDS', name='Federal Funds Effective Rate', s='Fed Funds', cat='Pol. Monetaria', ic='🏦',
+         fr='Diario', imp='ALTO', src='Federal Reserve', d='Tasa de referencia de la Fed.', tf='l'),
+    dict(id='T10Y2Y', name='Treasury Yield Spread (10Y-2Y)', s='Curva 10Y-2Y', cat='Pol. Monetaria', ic='🏦',
+         fr='Diario', imp='ALTO', src='Treasury/Fed', d='Spread 10Y-2Y. Inversión = señal de recesión.', tf='l'),
 ]
 
 
 # ============================================================
-# DATA FUNCTIONS
+# DATA ENGINE
 # ============================================================
 @st.cache_data(ttl=3600, show_spinner=False)
-def fetch_fred(fred_id, start='2015-01-01'):
-    """Fetch from FRED public CSV — no API key needed."""
+def load(fid, start='2015-01-01'):
+    """Load series from FRED API."""
     try:
-        url = f'https://fred.stlouisfed.org/graph/fredgraph.csv?id={fred_id}&cosd={start}'
-        resp = requests.get(url, timeout=20)
-        resp.raise_for_status()
-        df = pd.read_csv(io.StringIO(resp.text), parse_dates=['DATE'], index_col='DATE')
-        col = df.columns[0]
-        df[col] = pd.to_numeric(df[col], errors='coerce')
-        series = df[col].dropna()
-        return series if len(series) > 0 else None
+        s = fred.get_series(fid, observation_start=start)
+        return s.dropna() if s is not None else None
     except Exception:
         return None
 
 
-def transform(data, tf_type):
-    """Apply transformation to series."""
+def tfm(data, code):
+    """Transform series."""
     if data is None or len(data) < 2:
         return None, ''
     try:
-        if tf_type == 'pct12' and len(data) > 12:
+        if code == 'y' and len(data) > 12:
             return (data.pct_change(12) * 100).dropna(), '% YoY'
-        elif tf_type == 'pct':
+        elif code == 'm':
             return (data.pct_change() * 100).dropna(), '% MoM'
-        elif tf_type == 'pct_ann':
+        elif code == 'a':
             return (data.pct_change() * 400).dropna(), '% SAAR'
-        elif tf_type == 'diff':
-            return data.diff().dropna(), 'Cambio (K)'
+        elif code == 'd':
+            return data.diff().dropna(), 'Chg (K)'
         else:
-            return data, 'Nivel'
-    except Exception:
-        return data, 'Nivel'
+            return data, ''
+    except:
+        return data, ''
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def get_indicator_data(fred_id, tf_type, start='2015-01-01'):
-    """Fetch + transform in one cached call."""
-    raw = fetch_fred(fred_id, start)
-    if raw is None:
-        return None, None, ''
-    tf_data, unit = transform(raw, tf_type)
-    return raw, tf_data, unit
+def get_data(fid, code, start='2015-01-01'):
+    raw = load(fid, start)
+    t, u = tfm(raw, code)
+    return raw, t, u
 
 
 # ============================================================
-# CALENDAR FUNCTIONS
+# CALENDAR ENGINE
 # ============================================================
-SCHEDULE = [
+SCHED = [
     ('Nonfarm Payrolls', 'PAYEMS', 'ff', '08:30', 'ALTO'),
     ('Unemployment Rate', 'UNRATE', 'ff', '08:30', 'ALTO'),
     ('Avg Hourly Earnings', 'CES0500000003', 'ff', '08:30', 'ALTO'),
-    ('CPI (All Items)', 'CPIAUCSL', 'd12', '08:30', 'ALTO'),
-    ('Core CPI', 'CPILFESL', 'd12', '08:30', 'ALTO'),
-    ('PPI (Final Demand)', 'PPIFIS', 'd14', '08:30', 'MEDIO'),
-    ('Retail Sales', 'RSAFS', 'd15', '08:30', 'ALTO'),
-    ('PCE Price Index', 'PCEPI', 'd28', '08:30', 'ALTO'),
-    ('Core PCE', 'PCEPILFE', 'd28', '08:30', 'ALTO'),
-    ('Industrial Production', 'INDPRO', 'd16', '09:15', 'MEDIO'),
-    ('Housing Starts', 'HOUST', 'd18', '08:30', 'MEDIO'),
-    ('Durable Goods', 'DGORDER', 'd26', '08:30', 'MEDIO'),
-    ('Consumer Sentiment', 'UMCSENT', 'd14', '10:00', 'MEDIO'),
-    ('JOLTS Job Openings', 'JTSJOL', 'd7', '10:00', 'MEDIO'),
-    ('Trade Balance', 'BOPGSTB', 'd6', '08:30', 'MEDIO'),
+    ('CPI (All Items)', 'CPIAUCSL', 12, '08:30', 'ALTO'),
+    ('Core CPI', 'CPILFESL', 12, '08:30', 'ALTO'),
+    ('PPI (Final Demand)', 'PPIFIS', 14, '08:30', 'MEDIO'),
+    ('Retail Sales', 'RSAFS', 15, '08:30', 'ALTO'),
+    ('PCE Price Index', 'PCEPI', 28, '08:30', 'ALTO'),
+    ('Core PCE', 'PCEPILFE', 28, '08:30', 'ALTO'),
+    ('Industrial Production', 'INDPRO', 16, '09:15', 'MEDIO'),
+    ('Housing Starts', 'HOUST', 18, '08:30', 'MEDIO'),
+    ('Durable Goods', 'DGORDER', 26, '08:30', 'MEDIO'),
+    ('Consumer Sentiment', 'UMCSENT', 14, '10:00', 'MEDIO'),
+    ('JOLTS', 'JTSJOL', 7, '10:00', 'MEDIO'),
+    ('Trade Balance', 'BOPGSTB', 6, '08:30', 'MEDIO'),
     ('Initial Claims', 'ICSA', 'thu', '08:30', 'MEDIO'),
 ]
 
 
-def next_release(stype, today):
-    """Calculate next release date."""
-    def months_gen(n=4):
+def nxt(stype, today):
+    def mos(n=4):
         y, m = today.year, today.month
         for _ in range(n):
             yield y, m
             m += 1
-            if m > 12:
-                m, y = 1, y + 1
+            if m > 12: m, y = 1, y + 1
 
-    if stype == 'ff':  # First Friday
-        for y, m in months_gen():
-            c = cal_module.monthcalendar(y, m)
-            for w in c:
-                if w[cal_module.FRIDAY] != 0:
-                    d = datetime(y, m, w[cal_module.FRIDAY])
-                    if d.date() >= today.date():
-                        return d
+    if stype == 'ff':
+        for y, m in mos():
+            for w in cal_mod.monthcalendar(y, m):
+                if w[cal_mod.FRIDAY]:
+                    d = datetime(y, m, w[cal_mod.FRIDAY])
+                    if d.date() >= today.date(): return d
                     break
-
-    elif stype == 'thu':  # Next Thursday
+    elif stype == 'thu':
         d = today
-        while d.weekday() != 3:
-            d += timedelta(days=1)
+        while d.weekday() != 3: d += timedelta(days=1)
         return d
-
-    elif stype.startswith('d'):  # Day of month
-        target = int(stype[1:])
-        for y, m in months_gen():
-            mx = cal_module.monthrange(y, m)[1]
-            d = datetime(y, m, min(target, mx))
-            while d.weekday() >= 5:
-                d += timedelta(days=1)
-            if d.date() >= today.date():
-                return d
-
+    elif isinstance(stype, int):
+        for y, m in mos():
+            mx = cal_mod.monthrange(y, m)[1]
+            d = datetime(y, m, min(stype, mx))
+            while d.weekday() >= 5: d += timedelta(days=1)
+            if d.date() >= today.date(): return d
     return None
 
 
-@st.cache_data(ttl=3600, show_spinner="📅 Cargando calendario...")
-def build_calendar(days_ahead=60):
-    """Build economic calendar with previous values and consensus estimates."""
+@st.cache_data(ttl=3600, show_spinner="Cargando calendario económico...")
+def build_cal(days=60):
     today = datetime.now()
     rows = []
+    for name, fid, stype, t_et, imp in SCHED:
+        nd = nxt(stype, today)
+        if nd is None or (nd - today).days > days: continue
 
-    for name, fid, stype, time_et, impact in SCHEDULE:
-        nd = next_release(stype, today)
-        if nd is None or (nd - today).days > days_ahead:
-            continue
-
-        # Fetch data for previous & consensus
-        ind = next((i for i in INDICADORES if i['fred_id'] == fid), None)
-        prev_val = '—'
-        cons_val = '—'
-
+        ind = next((i for i in IND if i['id'] == fid), None)
+        prev, cons = '—', '—'
         if ind:
-            _, tf_data, unit = get_indicator_data(fid, ind['tf'], '2020-01-01')
-            if tf_data is not None and len(tf_data) > 3:
-                last = tf_data.iloc[-1]
-                avg3 = tf_data.iloc[-3:].mean()
-
-                if ind['tf'] == 'diff':
-                    prev_val = f"{last:+,.0f}"
-                    cons_val = f"{avg3:+,.0f}"
-                elif ind['tf'] in ('pct12', 'pct', 'pct_ann'):
-                    prev_val = f"{last:.2f}%"
-                    cons_val = f"{avg3:.2f}%"
+            _, td, u = get_data(fid, ind['tf'], '2020-01-01')
+            if td is not None and len(td) > 3:
+                lv = td.iloc[-1]
+                a3 = td.iloc[-3:].mean()
+                if ind['tf'] == 'd':
+                    prev, cons = f"{lv:+,.0f}", f"{a3:+,.0f}"
+                elif ind['tf'] in ('y', 'm', 'a'):
+                    prev, cons = f"{lv:.2f}%", f"{a3:.2f}%"
                 else:
-                    prev_val = f"{last:,.1f}"
-                    cons_val = f"{avg3:,.1f}"
+                    prev, cons = f"{lv:,.1f}", f"{a3:,.1f}"
 
-        days_until = (nd - today).days
-        rows.append({
-            'Fecha': nd.strftime('%Y-%m-%d'),
-            'Día': nd.strftime('%a'),
-            'Hora (ET)': time_et,
-            'Evento': name,
-            'fred_id': fid,
-            'Impacto': impact,
-            'Anterior': prev_val,
-            'Consenso Est.': cons_val,
-            'Días': days_until,
-        })
-
-    df = pd.DataFrame(rows)
-    if not df.empty:
-        df = df.sort_values('Fecha').reset_index(drop=True)
-    return df
+        du = (nd - today).days
+        rows.append(dict(
+            date=nd, fecha=nd.strftime('%b %d'), dia=nd.strftime('%a'),
+            hora=t_et, evento=name, fid=fid, imp=imp,
+            anterior=prev, consenso=cons, dias=du
+        ))
+    return sorted(rows, key=lambda x: x['date'])
 
 
 # ============================================================
-# CHART FUNCTIONS
+# CHART ENGINE
 # ============================================================
-def make_chart(ind, start='2015-01-01', h=400):
-    """Create a Plotly chart for one indicator."""
-    _, tf_data, unit = get_indicator_data(ind['fred_id'], ind['tf'], start)
-    if tf_data is None or len(tf_data) < 5:
-        return None
+PLT = dict(
+    bg='#ffffff', grid='#f1f5f9',
+    c1='#0f172a', c2='#2563eb', c3='#dc2626', c4='#10b981', c5='#d97706',
+    fill='rgba(15,23,42,0.04)', fillb='rgba(37,99,235,0.05)',
+)
+
+
+def chart(ind, start='2015-01-01', h=400):
+    _, td, u = get_data(ind['id'], ind['tf'], start)
+    if td is None or len(td) < 5: return None
 
     fig = go.Figure()
 
-    # Area fill + line
+    # Main line with area
     fig.add_trace(go.Scatter(
-        x=tf_data.index, y=tf_data.values,
-        fill='tozeroy',
-        fillcolor='rgba(37,99,235,0.06)',
-        line=dict(color=COLORS['c1'], width=2),
-        name=ind['short'],
-        hovertemplate='%{x|%b %d, %Y}<br><b>%{y:.2f}</b> ' + unit + '<extra></extra>'
+        x=td.index, y=td.values, fill='tozeroy',
+        fillcolor=PLT['fillb'], line=dict(color=PLT['c1'], width=2.2),
+        name=ind['s'],
+        hovertemplate='<b>%{x|%b %d, %Y}</b><br>%{y:.2f} ' + u + '<extra></extra>'
     ))
 
     # MA-6
-    if len(tf_data) > 6:
-        ma = tf_data.rolling(6).mean()
+    if len(td) > 6:
+        ma = td.rolling(6).mean()
         fig.add_trace(go.Scatter(
             x=ma.index, y=ma.values,
-            line=dict(color=COLORS['gold'], width=1.5, dash='dot'),
-            name='MA-6', opacity=0.7,
+            line=dict(color=PLT['c5'], width=1.5, dash='dot'),
+            name='MA-6', opacity=0.6,
             hovertemplate='MA-6: %{y:.2f}<extra></extra>'
         ))
 
-    # Last point
-    lv, ld = tf_data.iloc[-1], tf_data.index[-1]
+    # Last value
+    lv, ld = td.iloc[-1], td.index[-1]
     fig.add_trace(go.Scatter(
         x=[ld], y=[lv], mode='markers+text',
-        marker=dict(color=COLORS['red'], size=8, line=dict(color='white', width=2)),
+        marker=dict(color=PLT['c3'], size=8, line=dict(color='white', width=2)),
         text=[f'  {lv:.2f}'], textposition='middle right',
-        textfont=dict(size=11, color=COLORS['red'], family='JetBrains Mono'),
+        textfont=dict(size=11, color=PLT['c3'], family='IBM Plex Mono'),
         showlegend=False, hoverinfo='skip'
     ))
 
-    # Fed 2% target for inflation
-    if ind['cat'] == 'Inflación' and ind['tf'] == 'pct12':
-        fig.add_hline(y=2.0, line_dash='dot', line_color=COLORS['green'], line_width=1.5,
-                      annotation_text='Fed Target 2%', annotation_position='bottom right',
-                      annotation_font=dict(color=COLORS['green'], size=10))
+    # Fed 2% target
+    if ind['cat'] == 'Inflación' and ind['tf'] == 'y':
+        fig.add_hline(y=2, line_dash='dot', line_color=PLT['c4'], line_width=1.5,
+                      annotation_text='⎯ Fed Target 2%', annotation_position='bottom right',
+                      annotation_font=dict(color=PLT['c4'], size=10, family='IBM Plex Mono'))
 
-    # Zero line for % changes
-    if unit.startswith('%'):
+    # Zero line
+    if u.startswith('%'):
         fig.add_hline(y=0, line_color='#e2e8f0', line_width=1)
 
-    # COVID shading
-    if pd.Timestamp('2020-02-01') >= tf_data.index.min():
+    # COVID
+    if pd.Timestamp('2020-02-01') >= td.index.min():
         fig.add_vrect(x0='2020-02-01', x1='2020-04-01',
-                      fillcolor='rgba(220,38,38,0.05)', layer='below', line_width=0)
+                      fillcolor='rgba(220,38,38,0.04)', layer='below', line_width=0)
 
     fig.update_layout(
         title=dict(
-            text=f"<b>{ind['nombre']}</b><br>"
-                 f"<span style='font-size:11px;color:#94a3b8;'>"
-                 f"{ind['source']} · {ind['freq']} · "
-                 f"Último: {lv:.2f} {unit} ({ld.strftime('%b %Y')})</span>",
-            x=0.01, font=dict(size=13, family='DM Sans, sans-serif')
+            text=f"<b>{ind['name']}</b><br>"
+                 f"<span style='font-size:11px;color:#94a3b8;font-weight:400;'>"
+                 f"{ind['src']} · {ind['fr']} · "
+                 f"Último: <b style='color:#0f172a'>{lv:.2f}</b> {u} ({ld.strftime('%b %Y')})</span>",
+            x=0, font=dict(size=14, family='Outfit')
         ),
         xaxis=dict(
             showgrid=False,
@@ -450,425 +688,381 @@ def make_chart(ind, start='2015-01-01', h=400):
                     dict(count=5, label='5Y', step='year', stepmode='backward'),
                     dict(step='all', label='Max')
                 ],
-                bgcolor='#f1f5f9', activecolor=COLORS['primary'],
-                font=dict(color='#475569', size=10),
-                y=1.06
+                bgcolor='#f1f5f9', activecolor='#0f172a',
+                font=dict(color='#475569', size=10, family='Outfit'), y=1.05
             )
         ),
-        yaxis=dict(showgrid=True, gridcolor='#f1f5f9', gridwidth=1,
-                   title=dict(text=unit, font=dict(size=11, color='#94a3b8')),
+        yaxis=dict(showgrid=True, gridcolor=PLT['grid'], gridwidth=1,
+                   title=dict(text=u, font=dict(size=10, color='#94a3b8', family='IBM Plex Mono')),
                    zeroline=False),
-        plot_bgcolor='white', paper_bgcolor='white',
-        height=h,
-        margin=dict(l=50, r=20, t=75, b=40),
-        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1,
-                    font=dict(size=10, color='#64748b')),
+        plot_bgcolor=PLT['bg'], paper_bgcolor=PLT['bg'],
+        height=h, margin=dict(l=55, r=20, t=78, b=40),
+        legend=dict(orientation='h', yanchor='bottom', y=1.01, xanchor='right', x=1,
+                    font=dict(size=10, color='#64748b', family='Outfit')),
         hovermode='x unified',
-        hoverlabel=dict(bgcolor='white', font_size=12, font_family='DM Sans')
+        hoverlabel=dict(bgcolor='white', font_size=12, font_family='Outfit',
+                        bordercolor='#e2e8f0')
     )
     return fig
 
 
-def make_comparison(indicators, title, h=380):
-    """Multi-indicator comparison chart."""
+def multi_chart(inds, title, h=380):
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    palette = [COLORS['c1'], COLORS['c3'], COLORS['c4'], COLORS['c5']]
-
-    for i, ind in enumerate(indicators):
-        _, tf_data, unit = get_indicator_data(ind['fred_id'], ind['tf'])
-        if tf_data is not None:
+    pal = [PLT['c1'], PLT['c3'], PLT['c4'], PLT['c5']]
+    for i, ind in enumerate(inds):
+        _, td, u = get_data(ind['id'], ind['tf'])
+        if td is not None:
             fig.add_trace(go.Scatter(
-                x=tf_data.index, y=tf_data.values,
-                line=dict(color=palette[i % len(palette)], width=2),
-                name=f"{ind['short']} ({unit})",
-                hovertemplate=f"{ind['short']}: " + '%{y:.2f}<extra></extra>'
+                x=td.index, y=td.values,
+                line=dict(color=pal[i % len(pal)], width=2.2),
+                name=f"{ind['s']} ({u})",
+                hovertemplate=f"{ind['s']}: " + '%{y:.2f}<extra></extra>'
             ), secondary_y=(i == 1))
-
     fig.update_layout(
-        title=dict(text=f"<b>{title}</b>", x=0.01, font=dict(size=13, family='DM Sans')),
-        plot_bgcolor='white', paper_bgcolor='white',
-        height=h, hovermode='x unified',
-        legend=dict(orientation='h', y=1.08, font=dict(size=10)),
-        margin=dict(l=50, r=50, t=60, b=40),
+        title=dict(text=f"<b>{title}</b>", x=0, font=dict(size=14, family='Outfit')),
+        plot_bgcolor='white', paper_bgcolor='white', height=h,
+        hovermode='x unified',
+        legend=dict(orientation='h', y=1.08, font=dict(size=10, family='Outfit')),
+        margin=dict(l=55, r=55, t=58, b=40),
+        hoverlabel=dict(bgcolor='white', font_size=12, font_family='Outfit')
     )
     fig.update_xaxes(showgrid=False)
-    fig.update_yaxes(showgrid=True, gridcolor='#f1f5f9')
+    fig.update_yaxes(showgrid=True, gridcolor=PLT['grid'])
     return fig
 
 
 # ============================================================
-# FOMC DATA
+# FOMC
 # ============================================================
 FOMC = [
-    ('2025-01-29', False), ('2025-03-19', True), ('2025-05-07', False),
-    ('2025-06-18', True), ('2025-07-30', False), ('2025-09-17', True),
-    ('2025-10-29', False), ('2025-12-10', True),
-    ('2026-01-28', False), ('2026-03-18', True), ('2026-05-06', False),
-    ('2026-06-17', True), ('2026-07-29', False), ('2026-09-16', True),
-    ('2026-10-28', False), ('2026-12-09', True),
+    ('2025-01-29',0),('2025-03-19',1),('2025-05-07',0),('2025-06-18',1),
+    ('2025-07-30',0),('2025-09-17',1),('2025-10-29',0),('2025-12-10',1),
+    ('2026-01-28',0),('2026-03-18',1),('2026-05-06',0),('2026-06-17',1),
+    ('2026-07-29',0),('2026-09-16',1),('2026-10-28',0),('2026-12-09',1),
 ]
-
-
-def get_fomc():
-    today = datetime.now().date()
-    rows = []
-    for ds, sep in FOMC:
-        d = datetime.strptime(ds, '%Y-%m-%d').date()
-        if d >= today:
-            rows.append({
-                'Fecha': d.strftime('%b %d, %Y'),
-                'Tipo': '📊 Regular + SEP' if sep else 'Regular',
-                'Dot Plot': '✅' if sep else '—',
-                'Días': (d - today).days,
-            })
-    return pd.DataFrame(rows)
 
 
 # ============================================================
 # SIDEBAR
 # ============================================================
 with st.sidebar:
-    st.markdown("## ⚙️ Configuración")
+    st.markdown("### ⚙️ Configuración")
     st.divider()
-
-    all_cats = sorted(set(i['cat'] for i in INDICADORES))
-    sel_cats = st.multiselect("📂 Categorías", all_cats, default=all_cats)
-
-    sel_impact = st.multiselect("⚡ Impacto", ['ALTO', 'MEDIO'], default=['ALTO', 'MEDIO'])
-
-    cal_days = st.slider("📅 Días en calendario", 7, 90, 45, step=7)
-
-    chart_start = st.selectbox(
-        "📈 Historial desde",
-        ['2022-01-01', '2020-01-01', '2018-01-01', '2015-01-01', '2010-01-01'],
-        index=3,
-        format_func=lambda x: x[:4]
-    )
-
+    cats = sorted(set(i['cat'] for i in IND))
+    sel_cats = st.multiselect("Categorías", cats, default=cats)
+    sel_imp = st.multiselect("Impacto", ['ALTO', 'MEDIO'], default=['ALTO', 'MEDIO'])
+    cal_days = st.slider("Días en calendario", 7, 90, 45, 7)
+    ch_start = st.selectbox("Historial desde", ['2022-01-01','2020-01-01','2018-01-01','2015-01-01','2010-01-01'],
+                            index=3, format_func=lambda x: x[:4])
     st.divider()
-    st.caption(f"📡 Datos: FRED (St. Louis Fed)")
+    st.caption(f"📡 FRED API · Key: ...{FRED_KEY[-6:]}")
     st.caption(f"🔄 Cache: 1 hora")
     st.caption(f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M')} UTC")
-    st.caption("💡 Consenso = estimación estadística")
 
 
 # ============================================================
-# MAIN LAYOUT
+# HERO
 # ============================================================
+st.markdown(f"""
+<div class="hero">
+    <h1>📊 US Economic Calendar<span class="live">LIVE DATA</span></h1>
+    <p class="sub">Macro Research Dashboard — Calendario económico, consenso, series históricas & FOMC · {datetime.now().strftime('%B %d, %Y')}</p>
+</div>
+""", unsafe_allow_html=True)
 
-# ── HEADER ──
-hdr_col1, hdr_col2 = st.columns([4, 1])
-with hdr_col1:
-    st.markdown("# 🏛️ US Economic Calendar")
-    st.caption("Macro Research Dashboard — Datos económicos de EE.UU., consenso, históricos y monitor FOMC")
-with hdr_col2:
-    st.markdown("")
-    st.markdown(f"**🟢 LIVE** · {datetime.now().strftime('%b %d, %Y')}")
 
-st.divider()
-
-# ── KPI CARDS ──
-kpi_defs = [
-    ('CPIAUCSL', 'pct12', '🔥 CPI YoY'),
-    ('UNRATE', 'level', '👷 Desempleo'),
-    ('FEDFUNDS', 'level', '🏦 Fed Funds Rate'),
-    ('T10Y2Y', 'level', '📉 Curva 10Y-2Y'),
+# ============================================================
+# KPI STRIP
+# ============================================================
+kpis = [
+    ('CPIAUCSL','y','🔥','CPI YoY'),
+    ('UNRATE','l','👷','DESEMPLEO'),
+    ('FEDFUNDS','l','🏦','FED FUNDS'),
+    ('T10Y2Y','l','📉','CURVA 10Y-2Y'),
 ]
 
-kpi_cols = st.columns(4)
-for col, (fid, tf, label) in zip(kpi_cols, kpi_defs):
-    with col:
-        _, tf_data, unit = get_indicator_data(fid, tf, '2022-01-01')
-        if tf_data is not None and len(tf_data) > 1:
-            val = tf_data.iloc[-1]
-            delta = val - tf_data.iloc[-2]
-            st.metric(
-                label=label,
-                value=f"{val:.2f}{unit}",
-                delta=f"{delta:+.2f}",
-                delta_color="inverse" if fid in ('UNRATE',) else "normal"
-            )
-        else:
-            st.metric(label=label, value="—")
+kpi_html = '<div class="kpi-strip">'
+for fid, tf, icon, label in kpis:
+    _, td, u = get_data(fid, tf, '2022-01-01')
+    if td is not None and len(td) > 1:
+        v = td.iloc[-1]
+        d = v - td.iloc[-2]
+        dcls = 'up' if d > 0 else ('dn' if d < 0 else 'flat')
+        dsign = '+' if d > 0 else ''
+        kpi_html += f"""
+        <div class="kpi">
+            <div class="tag">{icon} {label}</div>
+            <div class="val">{v:.2f}<span class="unit"> {u}</span></div>
+            <div class="delta {dcls}">Δ {dsign}{d:.2f} vs anterior</div>
+        </div>"""
+    else:
+        kpi_html += f"""
+        <div class="kpi">
+            <div class="tag">{icon} {label}</div>
+            <div class="val">—</div>
+            <div class="delta flat">cargando...</div>
+        </div>"""
+kpi_html += '</div>'
+st.markdown(kpi_html, unsafe_allow_html=True)
 
-st.markdown("")
 
-# ── TABS ──
-tab_cal, tab_charts, tab_fomc, tab_compare, tab_deep = st.tabs([
-    "📅 Calendario",
-    "📈 Gráficas",
-    "🏦 FOMC",
-    "🔀 Comparativos",
-    "🔬 Análisis"
+# ============================================================
+# TABS
+# ============================================================
+t1, t2, t3, t4, t5 = st.tabs([
+    "📅 Calendario", "📈 Gráficas", "🏦 FOMC", "🔀 Comparativos", "🔬 Deep Dive"
 ])
 
 
-# ── TAB 1: CALENDAR ──
-with tab_cal:
-    st.markdown("### 📅 Próximas Publicaciones Económicas")
-    st.caption("Calendario de EE.UU. con dato anterior y estimación de consenso basada en tendencia (media 3 periodos)")
+# ── TAB 1: CALENDAR ──────────────────────────────────────────
+with t1:
+    st.markdown("""<div class="sec"><h2>📅 Próximas Publicaciones</h2></div>""", unsafe_allow_html=True)
+    st.caption("Calendario económico de EE.UU. · Dato anterior y consenso estimado (media 3 periodos)")
 
-    df_cal = build_calendar(cal_days)
+    events = build_cal(cal_days)
 
-    if not df_cal.empty:
-        # Filter
-        mask = df_cal['Impacto'].isin(sel_impact)
-        cat_fids = [i['fred_id'] for i in INDICADORES if i['cat'] in sel_cats]
-        mask &= df_cal['fred_id'].isin(cat_fids)
-        df_show = df_cal[mask].copy()
+    # filter
+    cat_fids = {i['id'] for i in IND if i['cat'] in sel_cats}
+    evts = [e for e in events if e['imp'] in sel_imp and e['fid'] in cat_fids]
 
-        if not df_show.empty:
-            # Format the countdown column with emojis
-            def format_days(d):
-                if d == 0:
-                    return '🔴 HOY'
-                elif d <= 3:
-                    return f'🟠 {d}d'
-                elif d <= 7:
-                    return f'🟡 {d}d'
-                else:
-                    return f'⚪ {d}d'
+    if evts:
+        # Build HTML table
+        rows_h = ''
+        for e in evts:
+            badge = f'<span class="b-high">ALTO</span>' if e['imp'] == 'ALTO' else f'<span class="b-med">MEDIO</span>'
+            d = e['dias']
+            if d == 0: chip = '<span class="cd cd-now">HOY</span>'
+            elif d <= 3: chip = f'<span class="cd cd-soon">{d}d</span>'
+            elif d <= 7: chip = f'<span class="cd cd-week">{d}d</span>'
+            else: chip = f'<span class="cd cd-later">{d}d</span>'
 
-            df_show['Countdown'] = df_show['Días'].apply(format_days)
+            rows_h += f"""<tr>
+                <td><strong>{e['fecha']}</strong><br><span style="color:#94a3b8;font-size:0.75rem;">{e['dia']}</span></td>
+                <td class="mono">{e['hora']} ET</td>
+                <td class="ev">{e['evento']}</td>
+                <td>{badge}</td>
+                <td class="mono">{e['anterior']}</td>
+                <td class="mono" style="color:#2563eb;font-weight:600;">{e['consenso']}</td>
+                <td>{chip}</td>
+            </tr>"""
 
-            # Format impact
-            def format_impact(x):
-                return '🔴 ALTO' if x == 'ALTO' else '🟡 MEDIO'
+        st.markdown(f"""
+        <table class="ctbl">
+            <thead><tr>
+                <th>FECHA</th><th>HORA</th><th>EVENTO</th>
+                <th>IMPACTO</th><th>ANTERIOR</th><th>CONSENSO</th><th>EN</th>
+            </tr></thead>
+            <tbody>{rows_h}</tbody>
+        </table>
+        """, unsafe_allow_html=True)
 
-            df_show['Impacto'] = df_show['Impacto'].apply(format_impact)
-
-            # Select display columns
-            display_cols = ['Fecha', 'Día', 'Hora (ET)', 'Evento', 'Impacto', 'Anterior', 'Consenso Est.', 'Countdown']
-            st.dataframe(
-                df_show[display_cols],
-                use_container_width=True,
-                hide_index=True,
-                height=min(len(df_show) * 38 + 40, 600),
-                column_config={
-                    'Fecha': st.column_config.TextColumn('📅 Fecha', width='medium'),
-                    'Día': st.column_config.TextColumn('Día', width='small'),
-                    'Hora (ET)': st.column_config.TextColumn('⏰ Hora', width='small'),
-                    'Evento': st.column_config.TextColumn('📊 Evento', width='large'),
-                    'Impacto': st.column_config.TextColumn('⚡ Impacto', width='medium'),
-                    'Anterior': st.column_config.TextColumn('📉 Anterior', width='medium'),
-                    'Consenso Est.': st.column_config.TextColumn('🎯 Consenso', width='medium'),
-                    'Countdown': st.column_config.TextColumn('⏳', width='small'),
-                }
-            )
-
-            # Summary stats
-            sc1, sc2, sc3 = st.columns(3)
-            high_count = len(df_show[df_show['Impacto'].str.contains('ALTO')])
-            sc1.metric("Total eventos", len(df_show))
-            sc2.metric("Alto impacto", high_count)
-            next_event = df_show.iloc[0]
-            sc3.metric("Próximo release", f"{next_event['Evento']}", f"en {next_event['Días']} días")
-        else:
-            st.info("No hay eventos que coincidan con los filtros.")
+        # Summary
+        st.markdown("")
+        mc1, mc2, mc3 = st.columns(3)
+        mc1.metric("Total eventos", len(evts))
+        mc2.metric("Alto impacto", sum(1 for e in evts if e['imp'] == 'ALTO'))
+        if evts:
+            mc3.metric("Próximo", evts[0]['evento'], f"en {evts[0]['dias']} días")
     else:
-        st.warning("No se pudieron cargar datos del calendario.")
+        st.info("No hay eventos con los filtros seleccionados.")
 
-    st.caption("⚠️ Para consenso de mercado en tiempo real, consultar Bloomberg / Reuters / Trading Economics.")
+    st.caption("⚠️ Consenso = estimación basada en tendencia reciente. Para consenso real: Bloomberg / Reuters.")
 
 
-# ── TAB 2: CHARTS ──
-with tab_charts:
-    st.markdown("### 📈 Series Históricas")
-    st.caption("Gráficas interactivas para cada indicador. Usa los botones 1Y/3Y/5Y/Max para cambiar el rango.")
+# ── TAB 2: CHARTS ────────────────────────────────────────────
+with t2:
+    st.markdown("""<div class="sec"><h2>📈 Series Históricas</h2></div>""", unsafe_allow_html=True)
+    st.caption("Gráficas interactivas · Botones 1Y/3Y/5Y/Max para cambiar rango · Hover para ver valores")
 
-    filtered = [i for i in INDICADORES if i['cat'] in sel_cats and i['impact'] in sel_impact]
-
-    if not filtered:
-        st.info("Selecciona al menos una categoría y nivel de impacto en el sidebar.")
+    flt = [i for i in IND if i['cat'] in sel_cats and i['imp'] in sel_imp]
+    if not flt:
+        st.info("Selecciona categorías e impacto en el sidebar.")
     else:
-        current_cat = ''
-        for ind in filtered:
-            cat_label = f"{ind['icon']} {ind['cat']}"
-            if cat_label != current_cat:
-                current_cat = cat_label
-                st.markdown(f"#### {cat_label}")
-
-            fig = make_chart(ind, start=chart_start)
+        cur = ''
+        for ind in flt:
+            cl = f"{ind['ic']} {ind['cat']}"
+            if cl != cur:
+                cur = cl
+                st.markdown(f"#### {cl}")
+            fig = chart(ind, start=ch_start)
             if fig:
-                st.plotly_chart(fig, use_container_width=True, key=f"chart_{ind['fred_id']}")
+                st.plotly_chart(fig, use_container_width=True, key=f"c_{ind['id']}")
             else:
-                st.caption(f"⚠️ {ind['short']}: datos no disponibles temporalmente")
+                st.warning(f"{ind['s']}: datos no disponibles")
 
 
-# ── TAB 3: FOMC ──
-with tab_fomc:
-    st.markdown("### 🏦 Calendario FOMC")
-    st.caption("Próximas reuniones del Federal Open Market Committee — decisión 14:00 ET, conferencia 14:30 ET")
+# ── TAB 3: FOMC ─────────────────────────────────────────────
+with t3:
+    st.markdown("""<div class="sec"><h2>🏦 Calendario FOMC</h2></div>""", unsafe_allow_html=True)
+    st.caption("Federal Open Market Committee · Decisión 14:00 ET · Conferencia 14:30 ET")
 
-    col_fomc1, col_fomc2 = st.columns([1.2, 2])
+    fc1, fc2 = st.columns([1.2, 2])
 
-    with col_fomc1:
-        df_fomc = get_fomc()
-        if not df_fomc.empty:
-            st.dataframe(
-                df_fomc.head(10),
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    'Fecha': st.column_config.TextColumn('📅 Fecha', width='medium'),
-                    'Tipo': st.column_config.TextColumn('Tipo', width='large'),
-                    'Dot Plot': st.column_config.TextColumn('📊', width='small'),
-                    'Días': st.column_config.NumberColumn('⏳ Días', width='small'),
-                }
-            )
+    with fc1:
+        today = datetime.now().date()
+        fomc_rows = ''
+        cnt = 0
+        for ds, sep in FOMC:
+            d = datetime.strptime(ds, '%Y-%m-%d').date()
+            if d >= today and cnt < 10:
+                dd = (d - today).days
+                scls = ' class="soon-row"' if dd <= 14 else ''
+                sep_txt = '📊 Regular + SEP' if sep else 'Regular'
+                dot = '✅' if sep else '—'
+                chip = f'<span class="cd cd-soon">{dd}d</span>' if dd <= 7 else f'<span class="cd cd-week">{dd}d</span>' if dd <= 30 else f'<span class="cd cd-later">{dd}d</span>'
+                fomc_rows += f'<tr{scls}><td><strong>{d.strftime("%b %d, %Y")}</strong></td><td>{sep_txt}</td><td>{dot}</td><td>{chip}</td></tr>'
+                cnt += 1
 
-            if len(df_fomc) > 0:
-                next_fomc = df_fomc.iloc[0]
-                st.info(f"**Próxima reunión:** {next_fomc['Fecha']} ({next_fomc['Tipo']}) — en **{next_fomc['Días']} días**")
+        st.markdown(f"""
+        <table class="ftbl">
+            <thead><tr><th>FECHA</th><th>TIPO</th><th>DOT PLOT</th><th>EN</th></tr></thead>
+            <tbody>{fomc_rows}</tbody>
+        </table>
+        """, unsafe_allow_html=True)
 
-    with col_fomc2:
-        ff = fetch_fred('FEDFUNDS', '2000-01-01')
-        if ff is not None:
+    with fc2:
+        raw_ff = load('FEDFUNDS', '2000-01-01')
+        if raw_ff is not None:
             fig_ff = go.Figure()
             fig_ff.add_trace(go.Scatter(
-                x=ff.index, y=ff.values,
-                fill='tozeroy', fillcolor='rgba(15,23,42,0.06)',
-                line=dict(color=COLORS['c1'], width=2),
+                x=raw_ff.index, y=raw_ff.values,
+                fill='tozeroy', fillcolor='rgba(15,23,42,0.05)',
+                line=dict(color=PLT['c1'], width=2),
                 hovertemplate='%{x|%b %Y}: <b>%{y:.2f}%</b><extra></extra>'
             ))
             fig_ff.update_layout(
-                title=dict(text="<b>Federal Funds Rate — Histórico</b>", x=0.01,
-                           font=dict(size=13, family='DM Sans')),
+                title=dict(text="<b>Federal Funds Rate — Histórico</b>", x=0,
+                           font=dict(size=14, family='Outfit')),
                 yaxis_title='%', plot_bgcolor='white', paper_bgcolor='white',
-                height=380, margin=dict(l=50, r=20, t=50, b=40),
+                height=350, margin=dict(l=50, r=20, t=50, b=40),
                 hovermode='x unified', showlegend=False,
                 xaxis=dict(showgrid=False),
-                yaxis=dict(showgrid=True, gridcolor='#f1f5f9')
+                yaxis=dict(showgrid=True, gridcolor=PLT['grid']),
+                hoverlabel=dict(bgcolor='white', font_family='Outfit')
             )
             st.plotly_chart(fig_ff, use_container_width=True)
 
-    # 10Y-2Y Spread
+    # Yield curve
     st.markdown("#### 📉 Curva de Yields — Spread 10Y vs 2Y")
-    t10y2y = fetch_fred('T10Y2Y', '2000-01-01')
-    if t10y2y is not None:
-        fig_curve = go.Figure()
-        fig_curve.add_trace(go.Scatter(
-            x=t10y2y.index, y=t10y2y.values,
-            fill='tozeroy',
-            fillcolor=np.where(t10y2y.values < 0, 'rgba(220,38,38,0.1)', 'rgba(22,163,74,0.06)').tolist()[0],
-            line=dict(color=COLORS['c1'], width=1.5),
+    raw_curve = load('T10Y2Y', '2000-01-01')
+    if raw_curve is not None:
+        fig_yc = go.Figure()
+        colors_fill = ['rgba(220,38,38,0.08)' if v < 0 else 'rgba(16,163,74,0.05)' for v in raw_curve.values]
+        fig_yc.add_trace(go.Scatter(
+            x=raw_curve.index, y=raw_curve.values,
+            fill='tozeroy', fillcolor='rgba(37,99,235,0.05)',
+            line=dict(color=PLT['c1'], width=1.5),
             hovertemplate='%{x|%b %Y}: <b>%{y:.2f}%</b><extra></extra>'
         ))
-        fig_curve.add_hline(y=0, line_color=COLORS['red'], line_width=1.5, line_dash='dash',
-                            annotation_text='Inversión (señal recesión)',
-                            annotation_font=dict(color=COLORS['red'], size=10))
-        fig_curve.update_layout(
-            title=dict(text="<b>Treasury Yield Spread 10Y - 2Y</b>", x=0.01,
-                       font=dict(size=13, family='DM Sans')),
+        fig_yc.add_hline(y=0, line_color=PLT['c3'], line_width=1.5, line_dash='dash',
+                         annotation_text='Inversión → señal recesión',
+                         annotation_font=dict(color=PLT['c3'], size=10, family='IBM Plex Mono'))
+        fig_yc.update_layout(
+            title=dict(text="<b>Treasury Yield Spread 10Y - 2Y</b>", x=0,
+                       font=dict(size=14, family='Outfit')),
             yaxis_title='%', plot_bgcolor='white', paper_bgcolor='white',
-            height=350, margin=dict(l=50, r=20, t=50, b=40),
+            height=340, margin=dict(l=50, r=20, t=50, b=40),
             hovermode='x unified', showlegend=False,
             xaxis=dict(showgrid=False),
-            yaxis=dict(showgrid=True, gridcolor='#f1f5f9')
+            yaxis=dict(showgrid=True, gridcolor=PLT['grid']),
         )
-        st.plotly_chart(fig_curve, use_container_width=True)
+        st.plotly_chart(fig_yc, use_container_width=True)
 
 
-# ── TAB 4: COMPARISONS ──
-with tab_compare:
-    st.markdown("### 🔀 Comparativos Multi-Indicador")
-    st.caption("Cruces entre indicadores para identificar patrones macro")
+# ── TAB 4: COMPARISONS ──────────────────────────────────────
+with t4:
+    st.markdown("""<div class="sec"><h2>🔀 Comparativos</h2></div>""", unsafe_allow_html=True)
 
-    comp_col1, comp_col2 = st.columns(2)
+    cc1, cc2 = st.columns(2)
+    with cc1:
+        ids = [i for i in IND if i['id'] in ('CPIAUCSL', 'PCEPILFE')]
+        f1 = multi_chart(ids, 'CPI vs Core PCE — ¿Converge al 2%?')
+        f1.add_hline(y=2, line_dash='dot', line_color=PLT['c4'],
+                     annotation_text='Target 2%', annotation_font=dict(color=PLT['c4'], size=10))
+        st.plotly_chart(f1, use_container_width=True)
 
-    with comp_col1:
-        inds = [i for i in INDICADORES if i['fred_id'] in ('CPIAUCSL', 'PCEPILFE')]
-        fig_c1 = make_comparison(inds, 'CPI vs Core PCE — ¿Converge al 2%?')
-        fig_c1.add_hline(y=2.0, line_dash='dot', line_color=COLORS['green'],
-                         annotation_text='Target 2%', annotation_font=dict(color=COLORS['green'], size=10))
-        st.plotly_chart(fig_c1, use_container_width=True)
-
-    with comp_col2:
-        inds2 = [i for i in INDICADORES if i['fred_id'] in ('UNRATE', 'CPIAUCSL')]
-        fig_c2 = make_comparison(inds2, 'Desempleo vs Inflación (Phillips Curve)')
-        st.plotly_chart(fig_c2, use_container_width=True)
+    with cc2:
+        ids2 = [i for i in IND if i['id'] in ('UNRATE', 'CPIAUCSL')]
+        f2 = multi_chart(ids2, 'Desempleo vs Inflación (Phillips Curve)')
+        st.plotly_chart(f2, use_container_width=True)
 
     st.divider()
-
-    # Custom comparison
     st.markdown("#### 🎛️ Comparativo personalizado")
-    cc1, cc2 = st.columns(2)
-    names = [i['short'] for i in INDICADORES]
-    with cc1:
-        sel1 = st.selectbox("Indicador 1", names, index=0)
-    with cc2:
-        sel2 = st.selectbox("Indicador 2", names, index=6)
-
-    if sel1 != sel2:
-        inds_custom = [i for i in INDICADORES if i['short'] in (sel1, sel2)]
-        fig_custom = make_comparison(inds_custom, f'{sel1} vs {sel2}')
-        st.plotly_chart(fig_custom, use_container_width=True)
+    pc1, pc2 = st.columns(2)
+    names = [i['s'] for i in IND]
+    with pc1: s1 = st.selectbox("Indicador 1", names, 0)
+    with pc2: s2 = st.selectbox("Indicador 2", names, 6)
+    if s1 != s2:
+        ci = [i for i in IND if i['s'] in (s1, s2)]
+        fc = multi_chart(ci, f'{s1} vs {s2}')
+        st.plotly_chart(fc, use_container_width=True)
 
 
-# ── TAB 5: DEEP DIVE ──
-with tab_deep:
-    st.markdown("### 🔬 Análisis Detallado")
+# ── TAB 5: DEEP DIVE ────────────────────────────────────────
+with t5:
+    st.markdown("""<div class="sec"><h2>🔬 Análisis Detallado</h2></div>""", unsafe_allow_html=True)
 
-    sel_name = st.selectbox("Selecciona indicador", [i['short'] for i in INDICADORES], label_visibility='collapsed')
-    ind = next((i for i in INDICADORES if i['short'] == sel_name), None)
+    sn = st.selectbox("Selecciona indicador", [i['s'] for i in IND], label_visibility='collapsed')
+    ind = next((i for i in IND if i['s'] == sn), None)
 
     if ind:
-        # Info box
-        st.info(f"**{ind['nombre']}** — {ind['desc']}  \n"
-                f"Fuente: {ind['source']} · Frecuencia: {ind['freq']} · FRED: `{ind['fred_id']}`")
+        st.markdown(f"""
+        <div class="info-card">
+            <h4>{ind['ic']} {ind['name']}</h4>
+            <p>{ind['d']}<br>
+            Fuente: <strong>{ind['src']}</strong> · Frecuencia: <strong>{ind['fr']}</strong> · FRED: <code>{ind['id']}</code></p>
+        </div>
+        """, unsafe_allow_html=True)
 
-        _, tf_data, unit = get_indicator_data(ind['fred_id'], ind['tf'], chart_start)
+        _, td, u = get_data(ind['id'], ind['tf'], ch_start)
+        if td is not None and len(td) > 5:
+            sc = st.columns(5)
+            sc[0].metric("Último", f"{td.iloc[-1]:.2f} {u}")
+            sc[1].metric("Media", f"{td.mean():.2f}")
+            sc[2].metric("Máximo", f"{td.max():.2f}")
+            sc[3].metric("Mínimo", f"{td.min():.2f}")
+            sc[4].metric("Volatilidad σ", f"{td.std():.2f}")
 
-        if tf_data is not None and len(tf_data) > 5:
-            # Stats
-            s_cols = st.columns(5)
-            s_cols[0].metric("Último", f"{tf_data.iloc[-1]:.2f} {unit}")
-            s_cols[1].metric("Media", f"{tf_data.mean():.2f}")
-            s_cols[2].metric("Máximo", f"{tf_data.max():.2f}")
-            s_cols[3].metric("Mínimo", f"{tf_data.min():.2f}")
-            s_cols[4].metric("Volatilidad (σ)", f"{tf_data.std():.2f}")
-
-            # Chart
-            fig_dd = make_chart(ind, start=chart_start, h=430)
-            if fig_dd:
-                st.plotly_chart(fig_dd, use_container_width=True, key='deep_chart')
+            fig_d = chart(ind, ch_start, 440)
+            if fig_d:
+                st.plotly_chart(fig_d, use_container_width=True, key='dd_chart')
 
             # Distribution
             fig_dist = go.Figure()
             fig_dist.add_trace(go.Histogram(
-                x=tf_data.values, nbinsx=40,
-                marker_color=COLORS['accent'], opacity=0.7,
+                x=td.values, nbinsx=40,
+                marker_color=PLT['c2'], opacity=0.65,
             ))
-            fig_dist.add_vline(x=tf_data.iloc[-1], line_color=COLORS['red'], line_dash='dash',
-                               annotation_text=f'Actual: {tf_data.iloc[-1]:.2f}',
-                               annotation_font=dict(color=COLORS['red']))
-            fig_dist.add_vline(x=tf_data.mean(), line_color=COLORS['green'], line_dash='dot',
-                               annotation_text=f'Media: {tf_data.mean():.2f}',
+            fig_dist.add_vline(x=td.iloc[-1], line_color=PLT['c3'], line_dash='dash',
+                               annotation_text=f'Actual: {td.iloc[-1]:.2f}',
+                               annotation_font=dict(color=PLT['c3'], family='IBM Plex Mono'))
+            fig_dist.add_vline(x=td.mean(), line_color=PLT['c4'], line_dash='dot',
+                               annotation_text=f'Media: {td.mean():.2f}',
                                annotation_position='top left',
-                               annotation_font=dict(color=COLORS['green']))
+                               annotation_font=dict(color=PLT['c4'], family='IBM Plex Mono'))
             fig_dist.update_layout(
-                title=dict(text=f"<b>Distribución Histórica — {ind['short']}</b>", x=0.01,
-                           font=dict(size=13, family='DM Sans')),
-                xaxis_title=unit, yaxis_title='Frecuencia',
+                title=dict(text=f"<b>Distribución Histórica — {ind['s']}</b>", x=0,
+                           font=dict(size=14, family='Outfit')),
+                xaxis_title=u, yaxis_title='Frecuencia',
                 plot_bgcolor='white', paper_bgcolor='white',
                 height=300, margin=dict(l=50, r=20, t=50, b=40),
                 showlegend=False
             )
-            st.plotly_chart(fig_dist, use_container_width=True, key='deep_dist')
+            st.plotly_chart(fig_dist, use_container_width=True, key='dd_dist')
 
-            # Percentile position
-            current_pct = (tf_data < tf_data.iloc[-1]).mean() * 100
-            st.progress(int(current_pct), text=f"Percentil actual: **{current_pct:.0f}%** (respecto al historial desde {chart_start[:4]})")
+            # Percentile
+            pct = (td < td.iloc[-1]).mean() * 100
+            st.progress(min(int(pct), 100),
+                        text=f"📊 Percentil actual: **{pct:.0f}%** — el valor actual es mayor que el {pct:.0f}% de las observaciones desde {ch_start[:4]}")
         else:
-            st.warning("No se pudieron obtener datos para este indicador.")
+            st.warning("No se pudieron obtener datos.")
 
 
-# ── FOOTER ──
-st.divider()
-st.caption(
-    "**US Economic Calendar** — Macro Research Dashboard · "
-    "Datos: FRED (Federal Reserve Bank of St. Louis) · Sin costo · "
-    "Auto-actualización al cargar (cache 1hr)  \n"
-    "⚠️ El consenso es una estimación estadística, no el consenso real de mercado. "
-    "No constituye asesoría de inversión."
-)
+# ── FOOTER ───────────────────────────────────────────────────
+st.markdown("""
+<div class="foot">
+    <strong>US Economic Calendar</strong> · Macro Research Dashboard<br>
+    Fuente: FRED API (Federal Reserve Bank of St. Louis) · Actualización automática al cargar (cache 1hr)<br>
+    ⚠️ El consenso es una estimación estadística, no el consenso real de mercado. No constituye asesoría de inversión.
+</div>
+""", unsafe_allow_html=True)
